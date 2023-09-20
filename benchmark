@@ -1,5 +1,9 @@
 #!/usr/bin/ruby
 
+ITERATIONS = 50
+SLEEP = false
+REGEX = %r{.*Uptime:\ ([0-9.]+) ms.*}
+
 require 'tmpdir'
 
 def fat_jar(baseline_jar, new_jar)
@@ -31,39 +35,64 @@ end
 
 def benchmark(title, baseline_command, new_command)
   baseline_results = Array.new
-  new_results = Array.new
-  iterations = 10
+  new_results = Array.new  
   puts "#{title}:"
   puts
-  puts "|       | Baseline |  New  |"
-  puts "| ----- | -------: | ----: |"
-  for i in 1..iterations do
-    baseline_result = execute(baseline_command)
+  puts "|        | Baseline |  New  |"
+  puts "| ------ | -------: | ----: |"
+  baseline_first = true
+  for i in 1..ITERATIONS do
+    if baseline_first
+      baseline_result = execute(baseline_command)      
+      new_result = execute(new_command)      
+    else 
+      new_result = execute(new_command)
+      baseline_result = execute(baseline_command)                
+    end    
     baseline_results << baseline_result
-    new_result = execute(new_command)
     new_results << new_result
-    puts "|       | #{"   %0.3f" % baseline_result} | #{"%0.3f" % new_result} |"
+    puts "|        | #{"   %0.3f" % baseline_result} | #{"%0.3f" % new_result} |"
+    baseline_first = !baseline_first
   end
-  puts "|  Mean |    #{"%0.3f" % mean(baseline_results)} | #{"%0.3f" % mean(new_results)} |"
-  puts "| Range |    #{"%0.3f" % range(baseline_results)} | #{"%0.3f" % range(new_results)} |"
+  puts "|    Min |    #{"%0.3f" % min(baseline_results)} | #{"%0.3f" % min(new_results)} |"
+  puts "|    Max |    #{"%0.3f" % max(baseline_results)} | #{"%0.3f" % max(new_results)} |"
+  puts "|   Mean |    #{"%0.3f" % mean(baseline_results)} | #{"%0.3f" % mean(new_results)} |"
+  puts "|  Range |    #{"%0.3f" % range(baseline_results)} | #{"%0.3f" % range(new_results)} |"
+  puts "| Stddev |    #{"%0.3f" % standard_deviation(baseline_results)} | #{"%0.3f" % standard_deviation(new_results)} |"
+end
+
+def standard_deviation(results)
+  mean = results.sum(0.0) / results.size
+  sum = results.sum(0.0) { |element| (element - mean) ** 2 }
+  variance = sum / (results.size - 1)
+  return Math.sqrt(variance)
+end
+
+def min(results)
+  return results.min
+end
+
+def max(results)
+  return results.max
 end
 
 def mean(results)
-  return results.reduce(:+).fdiv(results.size).round(3)
+  return results.sum(0.0) / results.size
 end
 
 def range(results)
-  return (results.max - results.min).round(3)
+  return results.max - results.min
 end
 
-def execute(command)
-  running_time_regex = %r{.*JVM\ running\ for\ ([0-9.]+).*}
-  sleep 2
+def execute(command)  
+  if SLEEP
+	sleep 2
+  end
   output = `#{command}`
-  if matches = output.match(running_time_regex)
+  if matches = output.match(REGEX)
 	return matches[1].to_f
   else
-    puts "Did not find JVM running time in #{output}"
+    puts "Did not find running time in #{output}"
     exit 1
   end
 end
